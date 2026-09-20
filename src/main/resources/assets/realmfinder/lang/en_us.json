@@ -1,0 +1,19 @@
+{
+  "item.realmfinder.camera": "Viewfinder Camera",
+  "item.realmfinder.photograph": "Photograph",
+  "item.realmfinder.photo_album": "Photo Album",
+  "item.realmfinder.photo_stand": "Photo Display Stand",
+  "block.realmfinder.photo_stand": "Photo Display Stand",
+  "tooltip.realmfinder.blocks": "Captured Blocks: %s",
+  "tooltip.realmfinder.place_hint": "Right-click to stamp into reality",
+  "tooltip.realmfinder.carve_hint": "Sneak + Right-click: Stamp without carving",
+  "tooltip.realmfinder.empty": "Empty Photograph",
+  "key.realmfinder.undo": "Undo Photo Placement",
+  "key.realmfinder.scale_up": "Increase Photo Scale",
+  "key.realmfinder.scale_down": "Decrease Photo Scale",
+  "category.realmfinder": "RealmFinder",
+  "message.realmfinder.undo_empty": "Nothing to undo!",
+  "message.realmfinder.undo_success": "Undid photo placement (%s blocks restored). Photo returned!",
+  "message.realmfinder.stamped": "Photo Materialized!",
+  "tooltip.realmfinder.undo_hover": "Click to undo this photo placement (or press [Z])"
+}

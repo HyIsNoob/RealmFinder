@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "realmfinder:block/photo_stand" },
+    "facing=south": { "model": "realmfinder:block/photo_stand", "y": 180 },
+    "facing=west": { "model": "realmfinder:block/photo_stand", "y": 270 },
+    "facing=east": { "model": "realmfinder:block/photo_stand", "y": 90 }
+  }
+}
