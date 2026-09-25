@@ -4,5 +4,5 @@ import net.minecraft.world.inventory.tooltip.TooltipComponent;
 
 import java.util.UUID;
 
-public record PhotoTooltipData(UUID snapshotId, int blockCount) implements TooltipComponent {
+public record PhotoTooltipData(UUID snapshotId, int blockCount, net.minecraft.nbt.CompoundTag photoTag) implements TooltipComponent {
 }

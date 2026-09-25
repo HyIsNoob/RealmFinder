@@ -34,7 +34,7 @@ public class PhotoAlbumItem extends Item {
             loadInventory(albumStack, container, serverPlayer.registryAccess());
 
             serverPlayer.openMenu(new SimpleMenuProvider(
-                    (syncId, inv, p) -> new PhotoAlbumMenu(syncId, inv, container, albumStack),
+                    (syncId, inv, p) -> new PhotoAlbumMenu(syncId, inv, container, albumStack, hand),
                     Component.translatable("item.realmfinder.photo_album")
             ));
 
@@ -68,7 +68,4 @@ public class PhotoAlbumItem extends Item {
         PlatformHelper.setCustomTag(stack, tag);
     }
 
-    public static void saveInventory(ItemStack stack, Container container) {
-        // Fallback for calls where registries aren't directly passed: handled when level is available
-    }
 }

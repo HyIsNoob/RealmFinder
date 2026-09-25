@@ -1,12 +1,10 @@
 package com.hyisnoob.realmfinder.common.block;
 
 import com.hyisnoob.realmfinder.RealmFinder;
-import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
 import net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
@@ -34,9 +32,5 @@ public class ModBlocks {
         Registry.register(BuiltInRegistries.BLOCK, RealmFinder.id("photo_stand"), PHOTO_STAND);
         Registry.register(BuiltInRegistries.ITEM, RealmFinder.id("photo_stand"), PHOTO_STAND_ITEM);
         Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE, RealmFinder.id("photo_stand"), PHOTO_STAND_BE);
-
-        ItemGroupEvents.modifyEntriesEvent(CreativeModeTabs.TOOLS_AND_UTILITIES).register(content -> {
-            content.accept(PHOTO_STAND_ITEM);
-        });
     }
 }

@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "realmfinder",
+  "version": "${version}",
+  "name": "RealmFinder",
+  "description": "Capture a slice of the Minecraft world and make the photograph become reality somewhere else.",
+  "authors": ["HyIsNoob"],
+  "license": "MIT",
+  "icon": "assets/realmfinder/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["com.hyisnoob.realmfinder.RealmFinder"],
+    "client": ["com.hyisnoob.realmfinder.client.RealmFinderClient"]
+  },
+  "mixins": [{"config": "realmfinder.client.mixins.json", "environment": "client"}],
+  "depends": {
+    "fabricloader": ">=0.16.9",
+    "minecraft": "~1.20.1",
+    "java": ">=17",
+    "fabric-api": "*"
+  }
+}

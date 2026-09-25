@@ -1,0 +1,79 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.147'
+}
+
+version = mod_version
+group = 'com.hyisnoob.realmfinder'
+base.archivesName = 'realmfinder-neoforge-1.21.1'
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+sourceSets.test.java.srcDir('../../src/test/java')
+
+neoForge {
+    version = neo_version
+    runs {
+        client { client() }
+        server { server(); programArgument '--nogui' }
+    }
+    mods {
+        realmfinder { sourceSet(sourceSets.main) }
+    }
+}
+
+def fabricOnly = [
+    'com/hyisnoob/realmfinder/RealmFinder.java',
+    'com/hyisnoob/realmfinder/common/block/ModBlocks.java',
+    'com/hyisnoob/realmfinder/common/command/ModCommands.java',
+    'com/hyisnoob/realmfinder/common/item/ModCreativeTabs.java',
+    'com/hyisnoob/realmfinder/common/item/ModItems.java',
+    'com/hyisnoob/realmfinder/common/menu/ModMenus.java',
+    'com/hyisnoob/realmfinder/common/network/ModPackets.java',
+    'com/hyisnoob/realmfinder/core/config/RealmFinderConfig.java',
+    'com/hyisnoob/realmfinder/client/ClientPreferences.java',
+    'com/hyisnoob/realmfinder/client/RealmFinderClient.java',
+    'com/hyisnoob/realmfinder/client/gui/RealmFinderSettingsScreen.java',
+    'com/hyisnoob/realmfinder/client/render/CameraOverlayRenderer.java',
+    'com/hyisnoob/realmfinder/client/render/FrustumGhostRenderer.java',
+    'com/hyisnoob/realmfinder/client/render/PhotoCaptureHelper.java',
+    'com/hyisnoob/realmfinder/client/render/ViewfinderOverlayRenderer.java',
+]
+
+tasks.named('compileJava', JavaCompile) {
+    source = files(
+        fileTree('../../src/main/java') { exclude fabricOnly },
+        fileTree('../../src/client/java') { exclude fabricOnly },
+        fileTree('src/main/java')
+    )
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+tasks.named('processResources', ProcessResources) {
+    from('../../src/main/resources') { exclude 'fabric.mod.json' }
+    from('../../src/client/resources')
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+    classpath += tasks.named('compileJava', JavaCompile).get().classpath
+    // These three tests bootstrap vanilla Minecraft directly. NeoForge requires
+    // its mod loader to be initialized first, so they run in the Fabric build.
+    exclude '**/PlacementGeometryTest.class'
+    exclude '**/SnapshotValidationTest.class'
+    exclude '**/UndoPhotoTest.class'
+}
+
+tasks.named('compileTestJava', JavaCompile) {
+    classpath += tasks.named('compileJava', JavaCompile).get().classpath
+}
+
+jar {
+    from('../../LICENSE') { rename { 'LICENSE_realmfinder' } }
+}

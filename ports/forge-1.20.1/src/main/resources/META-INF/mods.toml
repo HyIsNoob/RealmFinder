@@ -1,0 +1,24 @@
+modLoader="javafml"
+loaderVersion="[47,)"
+license="MIT"
+
+[[mods]]
+modId="realmfinder"
+version="1.1.0"
+displayName="RealmFinder"
+authors="HyIsNoob"
+description='''Capture a slice of the Minecraft world and make the photograph become reality somewhere else.'''
+
+[[dependencies.realmfinder]]
+modId="forge"
+mandatory=true
+versionRange="[47.3.0,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.realmfinder]]
+modId="minecraft"
+mandatory=true
+versionRange="[1.20.1,1.20.2)"
+ordering="NONE"
+side="BOTH"

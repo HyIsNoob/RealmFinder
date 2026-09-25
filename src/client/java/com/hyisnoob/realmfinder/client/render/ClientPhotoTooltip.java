@@ -38,7 +38,7 @@ public class ClientPhotoTooltip implements ClientTooltipComponent {
         guiGraphics.fill(px - 1, py - 1, px + photoSize + 1, py + photoSize + 1, 0xFF2B2A28);
 
         // Photo
-        ResourceLocation texture = PhotoCaptureHelper.getTexture(data.snapshotId());
+        ResourceLocation texture = PhotoCaptureHelper.getTexture(data.snapshotId(), data.photoTag());
         RenderSystem.enableBlend();
         guiGraphics.blit(texture, px, py, 0, 0, photoSize, photoSize, photoSize, photoSize);
 

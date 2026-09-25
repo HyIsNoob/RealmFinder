@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "S S",
+    "SPS",
+    " S "
+  ],
+  "key": {
+    "S": { "item": "minecraft:stick" },
+    "P": { "item": "minecraft:spruce_planks" }
+  },
+  "result": {
+    "id": "realmfinder:photo_stand",
+    "count": 1
+  }
+}

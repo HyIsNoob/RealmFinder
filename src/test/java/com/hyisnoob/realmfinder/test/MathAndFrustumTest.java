@@ -3,6 +3,7 @@ package com.hyisnoob.realmfinder.test;
 import com.hyisnoob.realmfinder.core.math.CameraTransform;
 import com.hyisnoob.realmfinder.core.math.Frustum;
 import org.joml.Vector3f;
+import org.joml.Vector3d;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -13,6 +14,15 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class MathAndFrustumTest {
+
+    @Test
+    public void testWorldTransformRetainsBlockPrecisionNearWorldBorder() {
+        CameraTransform camera = new CameraTransform(20_000_000.5, 65.0, -20_000_000.5, 0, 0);
+        Vector3d world = camera.toWorldSpacePrecise(-1.0f, -0.5f, 5.0f);
+        assertEquals(20_000_001.5, world.x, 0.0001);
+        assertEquals(64.5, world.y, 0.0001);
+        assertEquals(-19_999_995.5, world.z, 0.0001);
+    }
 
     @Test
     public void testCameraTransformVectors() {
@@ -193,47 +203,6 @@ public class MathAndFrustumTest {
     }
 
     @Test
-    public void testVoxelScalingExpansionGiant2x() {
-        CameraTransform originCam = new CameraTransform(0, 64, 0, 0, 0);
-
-        // 2x2x2 cube
-        List<Vector3f> camBlocks = new ArrayList<>();
-        for (int x = 0; x < 2; x++) {
-            for (int y = 0; y < 2; y++) {
-                for (int z = 4; z < 6; z++) {
-                    camBlocks.add(originCam.toCameraSpace(x + 0.5, y + 0.5, z + 0.5));
-                }
-            }
-        }
-        assertEquals(8, camBlocks.size());
-
-        // Place at scale 2.0
-        float scale = 2.0f;
-        int expansion = 2;
-        CameraTransform targetCam = new CameraTransform(50.5, 64.0, 50.5, 90.0f, 0.0f);
-        Map<String, Boolean> placedVoxelKeys = new HashMap<>();
-
-        for (Vector3f camRel : camBlocks) {
-            Vector3f worldPos = targetCam.toWorldSpace(camRel.x * scale, camRel.y * scale, camRel.z * scale);
-            int bx = (int) Math.floor(worldPos.x);
-            int by = (int) Math.floor(worldPos.y);
-            int bz = (int) Math.floor(worldPos.z);
-
-            for (int dx = 0; dx < expansion; dx++) {
-                for (int dy = 0; dy < expansion; dy++) {
-                    for (int dz = 0; dz < expansion; dz++) {
-                        String key = (bx + dx) + "," + (by + dy) + "," + (bz + dz);
-                        placedVoxelKeys.put(key, true);
-                    }
-                }
-            }
-        }
-
-        // A 2x2x2 cube expanded by 2x must fill exactly 4x4x4 = 64 distinct blocks!
-        assertEquals(64, placedVoxelKeys.size(), "2x2x2 cube expanded by 2x must yield exactly 64 contiguous voxels without overlap");
-    }
-
-    @Test
     public void testEntityPositionCameraTransformAndScale() {
         CameraTransform originCam = new CameraTransform(10, 65, 10, 0, 0);
         // Entity standing at (12, 65, 15)
@@ -249,13 +218,12 @@ public class MathAndFrustumTest {
         assertEquals(65.0f, roundtrip.y, 0.01f);
         assertEquals(15.0f, roundtrip.z, 0.01f);
 
-        // Place entity with target camera at (100, 65, 100) facing South (yaw = 0) at scale 2x
+        // Zoom 2x moves the entity to half its captured depth without changing height or width.
         CameraTransform targetCam = new CameraTransform(100, 65, 100, 0, 0);
-        float scale = 2.0f;
-        Vector3f worldPos = targetCam.toWorldSpace(camRel.x * scale, camRel.y * scale, camRel.z * scale);
-        // At scale 2x: forward 5 * 2 = 10 -> Z = 100 + 10 = 110. Right -2 * 2 = -4 -> X = 100 + (-4) * (-1) = 104
-        assertEquals(104.0f, worldPos.x, 0.01f);
-        assertEquals(65.0f, worldPos.y, 0.01f);
-        assertEquals(110.0f, worldPos.z, 0.01f);
+        var worldPos = com.hyisnoob.realmfinder.core.engine.PlacementGeometry.worldPosition(
+                targetCam, camRel.x, camRel.y, camRel.z, 2.0f);
+        assertEquals(102.0, worldPos.x, 0.01);
+        assertEquals(65.0, worldPos.y, 0.01);
+        assertEquals(102.5, worldPos.z, 0.01);
     }
 }

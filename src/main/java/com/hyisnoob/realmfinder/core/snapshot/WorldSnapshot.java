@@ -18,6 +18,7 @@ public class WorldSnapshot {
     private final float farPlane;
     private final float originalYaw;
     private final float originalPitch;
+    private final int captureZoom;
 
     private final List<BlockState> palette;
     private final List<CapturedBlock> blocks;
@@ -26,6 +27,13 @@ public class WorldSnapshot {
     public WorldSnapshot(UUID snapshotId, long timestamp, float fov, float aspectRatio,
                          float nearPlane, float farPlane, float originalYaw, float originalPitch,
                          List<BlockState> palette, List<CapturedBlock> blocks, List<CapturedEntity> entities) {
+        this(snapshotId, timestamp, fov, aspectRatio, nearPlane, farPlane, originalYaw, originalPitch,
+                1, palette, blocks, entities);
+    }
+
+    public WorldSnapshot(UUID snapshotId, long timestamp, float fov, float aspectRatio,
+                         float nearPlane, float farPlane, float originalYaw, float originalPitch,
+                         int captureZoom, List<BlockState> palette, List<CapturedBlock> blocks, List<CapturedEntity> entities) {
         this.snapshotId = snapshotId;
         this.timestamp = timestamp;
         this.fov = fov;
@@ -34,6 +42,7 @@ public class WorldSnapshot {
         this.farPlane = farPlane;
         this.originalYaw = originalYaw;
         this.originalPitch = originalPitch;
+        this.captureZoom = captureZoom;
         this.palette = palette;
         this.blocks = blocks;
         this.entities = entities != null ? entities : new ArrayList<>();
@@ -48,8 +57,14 @@ public class WorldSnapshot {
     public static WorldSnapshot createNew(UUID snapshotId, float fov, float aspectRatio,
                                           float nearPlane, float farPlane,
                                           float originalYaw, float originalPitch) {
+        return createNew(snapshotId, fov, aspectRatio, nearPlane, farPlane, originalYaw, originalPitch, 1);
+    }
+
+    public static WorldSnapshot createNew(UUID snapshotId, float fov, float aspectRatio,
+                                          float nearPlane, float farPlane,
+                                          float originalYaw, float originalPitch, int captureZoom) {
         return new WorldSnapshot(snapshotId, System.currentTimeMillis(), fov, aspectRatio,
-                nearPlane, farPlane, originalYaw, originalPitch,
+                nearPlane, farPlane, originalYaw, originalPitch, captureZoom,
                 new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
     }
 
@@ -61,6 +76,7 @@ public class WorldSnapshot {
     public float getFarPlane() { return farPlane; }
     public float getOriginalYaw() { return originalYaw; }
     public float getOriginalPitch() { return originalPitch; }
+    public int getCaptureZoom() { return captureZoom; }
 
     public List<BlockState> getPalette() { return palette; }
     public List<CapturedBlock> getBlocks() { return blocks; }

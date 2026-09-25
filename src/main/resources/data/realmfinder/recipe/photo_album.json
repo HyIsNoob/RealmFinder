@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "LPL",
+    "PBP",
+    "LPL"
+  ],
+  "key": {
+    "L": { "item": "minecraft:leather" },
+    "P": { "item": "minecraft:paper" },
+    "B": { "item": "minecraft:book" }
+  },
+  "result": {
+    "id": "realmfinder:photo_album",
+    "count": 1
+  }
+}

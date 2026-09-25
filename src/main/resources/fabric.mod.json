@@ -3,15 +3,11 @@
 	"id": "realmfinder",
 	"version": "${version}",
 	"name": "RealmFinder",
-	"description": "This is an example description! Tell everyone what your mod is about!",
+	"description": "Capture a slice of the Minecraft world and make the photograph become reality somewhere else.",
 	"authors": [
-		"Me!"
+		"HyIsNoob"
 	],
-	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
-	},
-	"license": "CC0-1.0",
+	"license": "MIT",
 	"icon": "assets/realmfinder/icon.png",
 	"environment": "*",
 	"entrypoints": {
@@ -23,7 +19,6 @@
 		]
 	},
 	"mixins": [
-		"realmfinder.mixins.json",
 		{
 			"config": "realmfinder.client.mixins.json",
 			"environment": "client"

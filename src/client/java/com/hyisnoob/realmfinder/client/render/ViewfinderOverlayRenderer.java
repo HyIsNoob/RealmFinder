@@ -21,7 +21,7 @@ public class ViewfinderOverlayRenderer {
     private static final long STAMP_ANIM_DURATION = 300;
 
     private static final float[] SCALES = {0.5f, 1.0f, 2.0f, 3.0f};
-    private static final String[] SCALE_NAMES = {"0.5x [MINI]", "1.0x [NORMAL]", "2.0x [GIANT]", "3.0x [COLOSSAL]"};
+    private static final String[] SCALE_NAMES = {"0.5x [FAR / ADD]", "1.0x [NORMAL]", "2.0x [CLOSE]", "3.0x [NEAR]"};
     private static int currentScaleIndex = 1; // Default 1.0x
 
     public static float getCurrentScale() {
@@ -65,7 +65,8 @@ public class ViewfinderOverlayRenderer {
 
         ItemStack main = mc.player.getMainHandItem();
         ItemStack off = mc.player.getOffhandItem();
-        ItemStack photoStack = main.is(ModItems.PHOTOGRAPH) ? main : (off.is(ModItems.PHOTOGRAPH) ? off : null);
+        ItemStack photoStack = main.is(ModItems.CAMERA) || off.is(ModItems.CAMERA) ? null
+                : main.is(ModItems.PHOTOGRAPH) ? main : (off.is(ModItems.PHOTOGRAPH) ? off : null);
 
         boolean holdingPhoto = photoStack != null;
 
@@ -94,8 +95,11 @@ public class ViewfinderOverlayRenderer {
         int screenW = guiGraphics.guiWidth();
         int screenH = guiGraphics.guiHeight();
 
-        // Exact square dimensions with visual scale feedback (mini shrinks slightly, giant expands slightly)
-        float visualScaleMult = currentScaleIndex == 0 ? 0.85f : (currentScaleIndex == 2 ? 1.12f : (currentScaleIndex == 3 ? 1.20f : 1.0f));
+        // The paper frame gives a small visual cue while the world outline shows exact placement.
+        float focusDistance = Math.max(4.0f, tag.getFloat("FarPlane") - 6.0f);
+        float farVisualScale = Math.clamp(focusDistance / (focusDistance + 12.0f), 0.35f, 0.80f);
+        float visualScaleMult = currentScaleIndex == 0 ? farVisualScale
+                : (currentScaleIndex == 2 ? 1.12f : (currentScaleIndex == 3 ? 1.20f : 1.0f));
         int baseSize = (int) (screenH * 0.52f * visualScaleMult);
         baseSize = (baseSize / 2) * 2;
 
@@ -164,7 +168,9 @@ public class ViewfinderOverlayRenderer {
         // 2. Paper Border Color:
         // Glowing Emerald Green if Aligned, Amber/Orange if Shift, Ivory if default
         int paperColor;
-        if (isAligned) {
+        if (!FrustumGhostRenderer.isValid()) {
+            paperColor = 0xFFFF5555;
+        } else if (isAligned) {
             paperColor = 0xFF00FF88; // Emerald Green glow
         } else if (isSneaking) {
             paperColor = 0xFFFFAA00; // Orange align mode
@@ -174,7 +180,7 @@ public class ViewfinderOverlayRenderer {
         guiGraphics.fill(frameX, frameY, frameX + frameW, frameY + frameH, paperColor);
 
         // 3. Render Captured Photo
-        ResourceLocation texture = PhotoCaptureHelper.getTexture(snapshotId);
+        ResourceLocation texture = PhotoCaptureHelper.getTexture(snapshotId, tag);
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, alpha);
@@ -185,7 +191,13 @@ public class ViewfinderOverlayRenderer {
         if (ease > 0.8f && !inStampAnim) {
             // A. Top Alignment Status Badge (Centered above the photo)
             int topY = frameY - 15;
-            if (isAligned) {
+            if (!FrustumGhostRenderer.isValid()) {
+                String badge = "TARGET BLOCKED";
+                int bw = mc.font.width(badge);
+                int bx = (screenW - bw) / 2;
+                guiGraphics.fill(bx - 6, topY - 2, bx + bw + 6, topY + 10, 0xCC401010);
+                guiGraphics.drawString(mc.font, badge, bx, topY, 0xFFFF5555, true);
+            } else if (isAligned) {
                 String badge = "LOCKED: " + currentDir + "  |  LEVEL 0°";
                 int bw = mc.font.width(badge);
                 int bx = (screenW - bw) / 2;
@@ -218,8 +230,8 @@ public class ViewfinderOverlayRenderer {
             guiGraphics.fill(leftCardX + 5, leftCardY + 14, leftCardX + leftCardW - 5, leftCardY + 15, 0x33FFFFFF);
             guiGraphics.drawString(mc.font, "Blocks: " + String.format(Locale.ROOT, "%,d", blockCount), leftCardX + 6, leftCardY + 18, 0xFFE0E0E0, true);
             guiGraphics.drawString(mc.font, "Entities: " + entityCount, leftCardX + 6, leftCardY + 28, 0xFFE0E0E0, true);
-            String gridTag = isAligned ? "Grid: LOCKED" : "Grid: ALIGNING";
-            int gridCol = isAligned ? 0xFF00FF88 : 0xFFFFAA00;
+            String gridTag = FrustumGhostRenderer.getStatusText();
+            int gridCol = FrustumGhostRenderer.isValid() ? 0xFF00FF88 : 0xFFFF5555;
             guiGraphics.drawString(mc.font, gridTag, leftCardX + 6, leftCardY + 38, gridCol, true);
 
             // C. Right Wing Panel: Perspective Scale & Controls
@@ -237,12 +249,14 @@ public class ViewfinderOverlayRenderer {
             guiGraphics.drawString(mc.font, "PERSPECTIVE", rightCardX + 6, rightCardY + 4, 0xFFFFCC00, true);
             guiGraphics.fill(rightCardX + 5, rightCardY + 14, rightCardX + rightCardW - 5, rightCardY + 15, 0x33FFFFFF);
             int sCol = currentScaleIndex == 1 ? 0xFFFFFFFF : (currentScaleIndex == 0 ? 0xFF88CCFF : 0xFFFFCC00);
-            guiGraphics.drawString(mc.font, "Scale: " + getScaleName(), rightCardX + 6, rightCardY + 18, sCol, true);
-            guiGraphics.drawString(mc.font, "Scroll / [ ]", rightCardX + 6, rightCardY + 28, 0xFF888888, true);
+            guiGraphics.drawString(mc.font, "Zoom: " + getScaleName(), rightCardX + 6, rightCardY + 18, sCol, true);
+            if (com.hyisnoob.realmfinder.client.ClientPreferences.get().showHudHints)
+                guiGraphics.drawString(mc.font, "Scroll / [ ]", rightCardX + 6, rightCardY + 28, 0xFF888888, true);
             String placeAction = isSneaking ? "R-Click: Additive" : "R-Click: Place";
             int placeCol = isSneaking ? 0xFFFFAA00 : 0xFF88FF88;
             guiGraphics.drawString(mc.font, placeAction, rightCardX + 6, rightCardY + 38, placeCol, true);
-            guiGraphics.drawString(mc.font, "Shift: Snap / Add", rightCardX + 6, rightCardY + 48, 0xFFAAAAAA, true);
+            if (com.hyisnoob.realmfinder.client.ClientPreferences.get().showHudHints)
+                guiGraphics.drawString(mc.font, "Shift: Snap / Add", rightCardX + 6, rightCardY + 48, 0xFFAAAAAA, true);
 
             // ZERO text below the photo! Entire hotbar, hearts, and hunger bar remain 100% unobstructed!
         }

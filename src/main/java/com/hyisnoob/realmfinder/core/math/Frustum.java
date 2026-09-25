@@ -1,6 +1,7 @@
 package com.hyisnoob.realmfinder.core.math;
 
 import org.joml.Vector3f;
+import org.joml.Vector3d;
 
 /**
  * Geometric viewing frustum (pyramid with near/far clipping planes)
@@ -94,15 +95,15 @@ public class Frustum {
      * Returns the 4 corners of the frustum plane at the given distance in world coordinates.
      * Order: Top-Left, Top-Right, Bottom-Right, Bottom-Left
      */
-    public Vector3f[] getCornersAtDistance(float distance) {
+    public Vector3d[] getCornersAtDistance(float distance) {
         float halfH = distance * tanHalfFov;
         float halfW = halfH * aspectRatio;
 
-        return new Vector3f[] {
-            transform.toWorldSpace(-halfW,  halfH, distance), // TL
-            transform.toWorldSpace( halfW,  halfH, distance), // TR
-            transform.toWorldSpace( halfW, -halfH, distance), // BR
-            transform.toWorldSpace(-halfW, -halfH, distance)  // BL
+        return new Vector3d[] {
+            transform.toWorldSpacePrecise(-halfW,  halfH, distance), // TL
+            transform.toWorldSpacePrecise( halfW,  halfH, distance), // TR
+            transform.toWorldSpacePrecise( halfW, -halfH, distance), // BR
+            transform.toWorldSpacePrecise(-halfW, -halfH, distance)  // BL
         };
     }
 }

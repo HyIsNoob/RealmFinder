@@ -31,6 +31,9 @@ bin/
 # fabric
 
 run/
+ports/*/logs/
+ports/*/*.log
+ports/*-mdk.zip
 
 # java
 

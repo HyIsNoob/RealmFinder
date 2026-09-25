@@ -5,11 +5,14 @@ import com.hyisnoob.realmfinder.client.render.ClientPhotoTooltip;
 import com.hyisnoob.realmfinder.client.render.FrustumGhostRenderer;
 import com.hyisnoob.realmfinder.client.render.PhotoCaptureHelper;
 import com.hyisnoob.realmfinder.client.render.ViewfinderOverlayRenderer;
+import com.hyisnoob.realmfinder.client.gui.RealmFinderSettingsScreen;
 import com.hyisnoob.realmfinder.common.item.CameraItem;
 import com.hyisnoob.realmfinder.common.item.PhotoTooltipData;
 import com.hyisnoob.realmfinder.common.item.PhotographItem;
 import com.hyisnoob.realmfinder.common.network.StampPhotoPayload;
+import com.hyisnoob.realmfinder.common.network.StampResultPayload;
 import com.hyisnoob.realmfinder.common.network.UndoPayload;
+import com.hyisnoob.realmfinder.common.network.SettingsSyncPayload;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -18,6 +21,8 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.TooltipComponentCallback;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.ConfirmScreen;
+import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 
 public class RealmFinderClient implements ClientModInitializer {
@@ -25,11 +30,23 @@ public class RealmFinderClient implements ClientModInitializer {
 	private static KeyMapping undoKey;
 	private static KeyMapping scaleUpKey;
 	private static KeyMapping scaleDownKey;
+	private static KeyMapping settingsKey;
 
 	@Override
 	public void onInitializeClient() {
+		ClientPreferences.load();
+		ClientPlayNetworking.registerGlobalReceiver(SettingsSyncPayload.TYPE,
+				(payload, context) -> context.client().execute(() -> {
+					ServerSettings.accept(payload.json(), payload.editable());
+					if (context.client().screen instanceof RealmFinderSettingsScreen screen) screen.applyServerSettings();
+				}));
 		// Register clean framebuffer capture hook
 		PhotoCaptureHelper.register();
+		ClientPlayNetworking.registerGlobalReceiver(StampResultPayload.TYPE,
+				(payload, context) -> context.client().execute(() -> {
+					ViewfinderOverlayRenderer.triggerStampAnimation();
+					CameraOverlayRenderer.triggerShutter();
+				}));
 
 		// Register Photo Album GUI Screen
 		net.minecraft.client.gui.screens.MenuScreens.register(
@@ -47,9 +64,9 @@ public class RealmFinderClient implements ClientModInitializer {
 		CameraItem.setClientCaptureCallback(PhotoCaptureHelper::requestCapture);
 
 		// Connect client stamp trigger to photograph with smooth dissolve animation
-		PhotographItem.setClientStampCallback(carve -> {
+		PhotographItem.setClientStampCallback((carve, hand, snapshotId) -> {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player != null) {
+			if (mc.player != null && mc.options.getCameraType().isFirstPerson()) {
 				float yaw = mc.player.getYRot();
 				float nearestYaw = Math.round(yaw / 90.0f) * 90.0f;
 				float pitch = mc.player.getXRot();
@@ -59,9 +76,9 @@ public class RealmFinderClient implements ClientModInitializer {
 				mc.player.setYRot(nearestYaw);
 				mc.player.setXRot(nearestPitch);
 
-				ViewfinderOverlayRenderer.triggerStampAnimation();
 				ClientPlayNetworking.send(new StampPhotoPayload(
 						carve,
+						hand == net.minecraft.world.InteractionHand.OFF_HAND, snapshotId,
 						mc.player.getX(), mc.player.getEyeY(), mc.player.getZ(),
 						nearestYaw, nearestPitch,
 						ViewfinderOverlayRenderer.getCurrentScale()
@@ -93,6 +110,8 @@ public class RealmFinderClient implements ClientModInitializer {
 				GLFW.GLFW_KEY_Z,
 				"category.realmfinder"
 		));
+		settingsKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+				"key.realmfinder.settings", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_O, "category.realmfinder"));
 
 		// Register [ ] keys for Scale Adjustment
 		scaleUpKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
@@ -109,8 +128,21 @@ public class RealmFinderClient implements ClientModInitializer {
 		));
 
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
+			while (settingsKey.consumeClick()) {
+				if (client.player != null && client.screen == null) {
+					ServerSettings.reset();
+					client.setScreen(new RealmFinderSettingsScreen());
+				}
+			}
 			while (undoKey.consumeClick()) {
-				ClientPlayNetworking.send(new UndoPayload());
+				if (client.player == null || client.screen != null) continue;
+				if (ClientPreferences.get().confirmBeforeUndo) {
+					client.setScreen(new ConfirmScreen(confirmed -> {
+						client.setScreen(null);
+						if (confirmed) ClientPlayNetworking.send(new UndoPayload());
+					}, Component.translatable("screen.realmfinder.undo_confirm"),
+						Component.translatable("screen.realmfinder.undo_confirm_detail")));
+				} else ClientPlayNetworking.send(new UndoPayload());
 			}
 			while (scaleUpKey.consumeClick()) {
 				ViewfinderOverlayRenderer.cycleScale(1);

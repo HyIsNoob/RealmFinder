@@ -3,7 +3,7 @@
 	"package": "com.hyisnoob.realmfinder.client.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"client": [
-		"ExampleClientMixin",
+		"CameraZoomMixin",
 		"MouseScrollMixin"
 	],
 	"injectors": {

@@ -1,0 +1,66 @@
+plugins {
+    id 'net.fabricmc.fabric-loom-remap' version "${loom_version}"
+}
+
+version = mod_version
+group = 'com.hyisnoob.realmfinder'
+base.archivesName = 'realmfinder-fabric-1.20.1'
+
+loom {
+    splitEnvironmentSourceSets()
+    mods {
+        realmfinder {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.client
+        }
+    }
+}
+
+sourceSets.main.java.srcDir('../../src/main/java')
+sourceSets.client.java.srcDir('../../src/client/java')
+// The 1.21 client mixin config targets Java 21; 1.20.1 needs its own Java 17 config.
+sourceSets.client.resources.setSrcDirs(['src/client/resources'])
+sourceSets.test.java.srcDir('../../src/test/java')
+
+def localJava = fileTree('src/main/java') { include '**/*.java' }
+def rootJava = fileTree('../../src/main/java') {
+    exclude localJava.files.collect { file('src/main/java').toPath().relativize(it.toPath()).toString().replace('\\', '/') }
+}
+tasks.named('compileJava', JavaCompile) { source = files(rootJava, localJava) }
+
+def localClientJava = fileTree('src/client/java') { include '**/*.java' }
+def rootClientJava = fileTree('../../src/client/java') {
+    exclude localClientJava.files.collect { file('src/client/java').toPath().relativize(it.toPath()).toString().replace('\\', '/') }
+}
+tasks.named('compileClientJava', JavaCompile) { source = files(rootClientJava, localClientJava) }
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('processResources', ProcessResources) {
+    from('../../src/main/resources') {
+        exclude 'fabric.mod.json', 'data/realmfinder/recipe/**', 'data/realmfinder/loot_table/**'
+    }
+    from('../../src/main/resources/data/realmfinder/loot_table') {
+        into 'data/realmfinder/loot_tables'
+    }
+    filesMatching('fabric.mod.json') { expand version: project.version }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 17
+    options.compilerArgs += ['-Xmaxerrs', '500']
+}
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+test { useJUnitPlatform() }

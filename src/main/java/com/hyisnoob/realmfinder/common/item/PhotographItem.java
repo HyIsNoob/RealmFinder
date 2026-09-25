@@ -13,11 +13,12 @@ import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.level.Level;
 
 import java.util.List;
+import java.util.UUID;
 
 public class PhotographItem extends Item {
 
     public interface ClientStampCallback {
-        void triggerStamp(boolean carve);
+        void triggerStamp(boolean carve, InteractionHand hand, UUID snapshotId);
     }
 
     private static ClientStampCallback clientStampCallback = null;
@@ -42,7 +43,7 @@ public class PhotographItem extends Item {
         if (level.isClientSide && clientStampCallback != null) {
             // Normal right-click: carve world; Shift + Right-click: don't carve (additive only)
             boolean carve = !player.isShiftKeyDown();
-            clientStampCallback.triggerStamp(carve);
+            clientStampCallback.triggerStamp(carve, hand, tag.getUUID("SnapshotId"));
         }
 
         player.getCooldowns().addCooldown(this, 10);
@@ -70,7 +71,7 @@ public class PhotographItem extends Item {
     public java.util.Optional<net.minecraft.world.inventory.tooltip.TooltipComponent> getTooltipImage(ItemStack stack) {
         CompoundTag tag = PlatformHelper.getCustomTag(stack);
         if (tag.hasUUID("SnapshotId")) {
-            return java.util.Optional.of(new PhotoTooltipData(tag.getUUID("SnapshotId"), tag.getInt("BlockCount")));
+            return java.util.Optional.of(new PhotoTooltipData(tag.getUUID("SnapshotId"), tag.getInt("BlockCount"), tag));
         }
         return java.util.Optional.empty();
     }

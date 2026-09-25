@@ -1,6 +1,7 @@
 package com.hyisnoob.realmfinder.core.math;
 
 import org.joml.Vector3f;
+import org.joml.Vector3d;
 
 /**
  * Encapsulates camera orientation and coordinates in Minecraft's coordinate system.
@@ -82,5 +83,13 @@ public class CameraTransform {
         float wy = (float) eyeY + camRight * right.y + camUp * up.y + camForward * forward.y;
         float wz = (float) eyeZ + camRight * right.z + camUp * up.z + camForward * forward.z;
         return new Vector3f(wx, wy, wz);
+    }
+
+    public Vector3d toWorldSpacePrecise(float camRight, float camUp, float camForward) {
+        return new Vector3d(
+                eyeX + (double) camRight * right.x + (double) camUp * up.x + (double) camForward * forward.x,
+                eyeY + (double) camRight * right.y + (double) camUp * up.y + (double) camForward * forward.y,
+                eyeZ + (double) camRight * right.z + (double) camUp * up.z + (double) camForward * forward.z
+        );
     }
 }

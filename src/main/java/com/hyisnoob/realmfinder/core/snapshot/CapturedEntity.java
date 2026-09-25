@@ -3,7 +3,7 @@ package com.hyisnoob.realmfinder.core.snapshot;
 import net.minecraft.nbt.CompoundTag;
 
 /**
- * Represents a single captured entity (mob, animal, armor stand, item frame, etc.)
+ * Represents a captured living entity and its bounded gameplay state,
  * positioned relative to the camera coordinate frame.
  */
 public class CapturedEntity {

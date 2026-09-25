@@ -24,7 +24,6 @@ import java.util.UUID;
 public class PhotoStandRenderer implements BlockEntityRenderer<PhotoStandBlockEntity> {
 
     private static final ResourceLocation DEFAULT_PHOTO_TEX = ResourceLocation.fromNamespaceAndPath("realmfinder", "textures/item/photograph.png");
-    private static final ResourceLocation BACKING_TEX = ResourceLocation.withDefaultNamespace("textures/block/spruce_planks.png");
 
     public PhotoStandRenderer(BlockEntityRendererProvider.Context context) {
     }
@@ -41,38 +40,23 @@ public class PhotoStandRenderer implements BlockEntityRenderer<PhotoStandBlockEn
         CompoundTag tag = PlatformHelper.getCustomTag(photoStack);
         if (tag.hasUUID("SnapshotId")) {
             UUID snapshotId = tag.getUUID("SnapshotId");
-            photoTexture = PhotoCaptureHelper.getTexture(snapshotId);
+            photoTexture = PhotoCaptureHelper.getTexture(snapshotId, tag);
         }
 
         poseStack.pushPose();
 
-        // 1. Center of the stand block
-        poseStack.translate(0.5, 0.48, 0.5);
+        // Center the picture inside the model's open frame.
+        poseStack.translate(0.5, 0.53125, 0.5);
 
         // 2. Rotate towards facing direction
         Direction facing = be.getBlockState().getValue(PhotoStandBlock.FACING);
         poseStack.mulPose(Axis.YP.rotationDegrees(-facing.toYRot()));
 
-        // 3. Move forward slightly onto the easel shelf ledge and tilt back
-        poseStack.translate(0.0, 0.0, -0.19);
-        poseStack.mulPose(Axis.XP.rotationDegrees(12.0f));
+        // The local +Z face rotates towards the block's FACING direction.
+        poseStack.translate(0.0, 0.0, 0.33);
 
-        // 4. Render Backing Plate (Wooden board support)
-        float boardW = 0.68f;
-        float boardH = 0.68f;
-        float halfBW = boardW / 2.0f;
-        float halfBH = boardH / 2.0f;
-
-        VertexConsumer boardConsumer = bufferSource.getBuffer(RenderType.entityCutout(BACKING_TEX));
-        Matrix4f boardMat = poseStack.last().pose();
-        Matrix3f boardNormal = poseStack.last().normal();
-
-        // Backing back-face
-        drawQuad(boardConsumer, boardMat, boardNormal, halfBW, -halfBW, -halfBH, halfBH, -0.005f, 0, 0, -1, packedLight, 0.0f, 1.0f, 0.0f, 1.0f);
-
-        // 5. Render Front Photograph Quad
-        float photoW = 0.62f;
-        float photoH = 0.62f;
+        float photoW = 0.48f;
+        float photoH = 0.54f;
         float halfPW = photoW / 2.0f;
         float halfPH = photoH / 2.0f;
 
@@ -81,7 +65,7 @@ public class PhotoStandRenderer implements BlockEntityRenderer<PhotoStandBlockEn
         Matrix3f photoNormal = poseStack.last().normal();
 
         // Front face (with photograph texture)
-        drawQuad(photoConsumer, photoMat, photoNormal, -halfPW, halfPW, -halfPH, halfPH, 0.002f, 0, 0, 1, packedLight, 0.0f, 1.0f, 1.0f, 0.0f);
+        drawQuad(photoConsumer, photoMat, photoNormal, -halfPW, halfPW, -halfPH, halfPH, 0.002f, 0, 0, 1, packedLight, 0.0f, 1.0f, 0.0f, 1.0f);
 
         poseStack.popPose();
     }

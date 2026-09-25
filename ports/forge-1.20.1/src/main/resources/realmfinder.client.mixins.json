@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "minVersion": "0.8.5",
+  "package": "com.hyisnoob.realmfinder.client.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "realmfinder.refmap.json",
+  "client": [
+    "CameraZoomMixin",
+    "MouseScrollMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

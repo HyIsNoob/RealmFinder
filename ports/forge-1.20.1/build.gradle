@@ -1,0 +1,87 @@
+plugins {
+    id 'java'
+    id 'net.minecraftforge.gradle' version '6.0.54'
+    id 'org.spongepowered.mixin' version '0.7.38'
+}
+
+version = mod_version
+group = 'com.hyisnoob.realmfinder'
+base.archivesName = 'realmfinder-forge-1.20.1'
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+minecraft {
+    mappings channel: 'official', version: minecraft_version
+    copyIdeResources = true
+    runs {
+        client {
+            workingDirectory project.file('run')
+            mods { realmfinder { source sourceSets.main } }
+        }
+        server {
+            workingDirectory project.file('run')
+            args '--nogui'
+            mods { realmfinder { source sourceSets.main } }
+        }
+    }
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+def baseMain = fileTree('../../src/main/java') { include '**/*.java' }
+def baseClient = fileTree('../../src/client/java') { include '**/*.java' }
+def backportMain = fileTree('../fabric-1.20.1/src/main/java') { include '**/*.java' }
+def backportClient = fileTree('../fabric-1.20.1/src/client/java') { include '**/*.java' }
+def forgeMain = fileTree('src/main/java') { include '**/*.java' }
+
+def forgeNames = forgeMain.files.collect { file('src/main/java').toPath().relativize(it.toPath()).toString().replace('\\', '/') }
+def backportMainNames = backportMain.files.collect { file('../fabric-1.20.1/src/main/java').toPath().relativize(it.toPath()).toString().replace('\\', '/') }
+def backportClientNames = backportClient.files.collect { file('../fabric-1.20.1/src/client/java').toPath().relativize(it.toPath()).toString().replace('\\', '/') }
+
+tasks.named('compileJava', JavaCompile) {
+    source = files(
+        fileTree('../../src/main/java') { exclude backportMainNames + forgeNames },
+        fileTree('../../src/client/java') { exclude backportClientNames + forgeNames },
+        fileTree('../fabric-1.20.1/src/main/java') { exclude forgeNames },
+        fileTree('../fabric-1.20.1/src/client/java') { exclude forgeNames },
+        forgeMain
+    )
+    options.encoding = 'UTF-8'
+    options.release = 17
+    options.compilerArgs += ['-Xmaxerrs', '500']
+}
+
+tasks.named('processResources', ProcessResources) {
+    from('../../src/main/resources') {
+        exclude 'fabric.mod.json', 'data/realmfinder/recipe/**', 'data/realmfinder/loot_table/**'
+    }
+    from('../../src/client/resources') {
+        exclude 'realmfinder.client.mixins.json'
+    }
+    from('../fabric-1.20.1/src/main/resources/data/realmfinder/recipes') {
+        into 'data/realmfinder/recipes'
+    }
+    from('../../src/main/resources/data/realmfinder/loot_table') {
+        into 'data/realmfinder/loot_tables'
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+mixin {
+    add sourceSets.main, 'realmfinder.refmap.json'
+    config 'realmfinder.client.mixins.json'
+}
+
+sourceSets.test.java.srcDir('../../src/test/java')
+test {
+    useJUnitPlatform()
+}
+
+jar {
+    manifest.attributes('MixinConfigs': 'realmfinder.client.mixins.json')
+    finalizedBy 'reobfJar'
+}

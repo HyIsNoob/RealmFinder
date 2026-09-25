@@ -1,5 +1,6 @@
 package com.hyisnoob.realmfinder.client.mixin;
 
+import com.hyisnoob.realmfinder.client.CameraZoom;
 import com.hyisnoob.realmfinder.client.render.ViewfinderOverlayRenderer;
 import com.hyisnoob.realmfinder.common.item.ModItems;
 import net.minecraft.client.Minecraft;
@@ -21,7 +22,15 @@ public class MouseScrollMixin {
 
     @Inject(method = "onScroll", at = @At("HEAD"), cancellable = true)
     private void onMouseScroll(long windowPointer, double xOffset, double yOffset, CallbackInfo ci) {
-        if (this.minecraft.player != null && windowPointer == this.minecraft.getWindow().getWindow()) {
+        if (this.minecraft.player != null && this.minecraft.screen == null
+                && windowPointer == this.minecraft.getWindow().getWindow()) {
+            boolean holdingCamera = this.minecraft.player.getMainHandItem().is(ModItems.CAMERA)
+                    || this.minecraft.player.getOffhandItem().is(ModItems.CAMERA);
+            if (holdingCamera && Screen.hasControlDown() && yOffset != 0) {
+                CameraZoom.cycle(yOffset > 0 ? 1 : -1);
+                ci.cancel();
+                return;
+            }
             boolean holdingPhoto = this.minecraft.player.getMainHandItem().is(ModItems.PHOTOGRAPH)
                     || this.minecraft.player.getOffhandItem().is(ModItems.PHOTOGRAPH);
 

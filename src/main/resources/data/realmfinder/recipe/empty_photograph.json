@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    " P ",
+    "PIP",
+    " P "
+  ],
+  "key": {
+    "P": { "item": "minecraft:paper" },
+    "I": { "item": "minecraft:ink_sac" }
+  },
+  "result": {
+    "id": "realmfinder:empty_photograph",
+    "count": 4
+  }
+}

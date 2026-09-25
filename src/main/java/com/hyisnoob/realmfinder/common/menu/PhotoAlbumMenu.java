@@ -3,6 +3,7 @@ package com.hyisnoob.realmfinder.common.menu;
 import com.hyisnoob.realmfinder.common.item.ModItems;
 import com.hyisnoob.realmfinder.common.item.PhotoAlbumItem;
 import net.minecraft.world.Container;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -15,47 +16,62 @@ public class PhotoAlbumMenu extends AbstractContainerMenu {
     public static final int ALBUM_SLOTS = 18;
     private final Container albumContainer;
     private final ItemStack albumStack;
+    private final InteractionHand heldHand;
 
     public static PhotoAlbumMenu createClientMenu(int syncId, Inventory playerInventory) {
-        return new PhotoAlbumMenu(syncId, playerInventory, new SimpleContainer(ALBUM_SLOTS), ItemStack.EMPTY);
+        return new PhotoAlbumMenu(syncId, playerInventory, new SimpleContainer(ALBUM_SLOTS), ItemStack.EMPTY,
+                InteractionHand.MAIN_HAND);
     }
 
-    public PhotoAlbumMenu(int syncId, Inventory playerInventory, Container albumContainer, ItemStack albumStack) {
+    public PhotoAlbumMenu(int syncId, Inventory playerInventory, Container albumContainer, ItemStack albumStack,
+                          InteractionHand heldHand) {
         super(ModMenus.PHOTO_ALBUM, syncId);
         this.albumContainer = albumContainer;
         this.albumStack = albumStack;
+        this.heldHand = heldHand;
         checkContainerSize(albumContainer, ALBUM_SLOTS);
         albumContainer.startOpen(playerInventory.player);
 
-        // 1. Album Slots (2 rows of 9 slots: x = 8, y = 18 and y = 36)
+        // Album page: two rows of nine photographs.
         for (int row = 0; row < 2; row++) {
             for (int col = 0; col < 9; col++) {
                 int index = col + row * 9;
-                this.addSlot(new Slot(albumContainer, index, 8 + col * 18, 18 + row * 18) {
+                this.addSlot(new Slot(albumContainer, index, 8 + col * 18, 34 + row * 18) {
                     @Override
                     public boolean mayPlace(ItemStack stack) {
                         return stack.is(ModItems.PHOTOGRAPH);
+                    }
+
+                    @Override
+                    public void setChanged() {
+                        super.setChanged();
+                        if (!PhotoAlbumMenu.this.albumStack.isEmpty()
+                                && !playerInventory.player.level().isClientSide) {
+                            PhotoAlbumItem.saveInventory(PhotoAlbumMenu.this.albumStack,
+                                    PhotoAlbumMenu.this.albumContainer, playerInventory.player.registryAccess());
+                        }
                     }
                 });
             }
         }
 
-        // 2. Player Inventory (3 rows of 9 slots: y = 68)
+        // Player inventory below the archive page.
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < 9; col++) {
-                this.addSlot(new Slot(playerInventory, col + row * 9 + 9, 8 + col * 18, 68 + row * 18));
+                this.addSlot(new Slot(playerInventory, col + row * 9 + 9, 8 + col * 18, 94 + row * 18));
             }
         }
 
-        // 3. Player Hotbar (1 row of 9 slots: y = 126)
+        // Hotbar.
         for (int col = 0; col < 9; col++) {
-            this.addSlot(new Slot(playerInventory, col, 8 + col * 18, 126));
+            this.addSlot(new Slot(playerInventory, col, 8 + col * 18, 154));
         }
     }
 
     @Override
     public boolean stillValid(Player player) {
-        return this.albumContainer.stillValid(player);
+        return albumStack.isEmpty() || (player.getItemInHand(heldHand) == albumStack
+                && albumContainer.stillValid(player));
     }
 
     @Override

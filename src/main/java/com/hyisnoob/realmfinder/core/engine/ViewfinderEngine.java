@@ -1,9 +1,12 @@
 package com.hyisnoob.realmfinder.core.engine;
 
+import com.hyisnoob.realmfinder.RealmFinder;
+import com.hyisnoob.realmfinder.core.config.RealmFinderConfig;
 import com.hyisnoob.realmfinder.core.math.CameraTransform;
 import com.hyisnoob.realmfinder.core.math.Frustum;
 import com.hyisnoob.realmfinder.core.snapshot.CapturedBlock;
 import com.hyisnoob.realmfinder.core.snapshot.CapturedEntity;
+import com.hyisnoob.realmfinder.core.snapshot.CompanionData;
 import com.hyisnoob.realmfinder.core.snapshot.WorldSnapshot;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -12,6 +15,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 import net.minecraft.world.entity.boss.wither.WitherBoss;
 import net.minecraft.world.entity.player.Player;
@@ -19,7 +23,6 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.BaseRailBlock;
 import net.minecraft.world.level.block.BaseTorchBlock;
 import net.minecraft.world.level.block.BellBlock;
@@ -36,14 +39,17 @@ import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.TripWireBlock;
 import net.minecraft.world.level.block.TripWireHookBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.SignBlockEntity;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import org.joml.Vector3f;
+import org.joml.Vector3d;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 public class ViewfinderEngine {
@@ -59,25 +65,30 @@ public class ViewfinderEngine {
 
     public static WorldSnapshot capture(Level level, CameraTransform camera, float fov, float aspectRatio,
                                          float nearPlane, float farPlane, UUID snapshotId) {
+        return capture(level, camera, fov, aspectRatio, nearPlane, farPlane, snapshotId, 1);
+    }
+
+    public static WorldSnapshot capture(Level level, CameraTransform camera, float fov, float aspectRatio,
+                                         float nearPlane, float farPlane, UUID snapshotId, int captureZoom) {
         WorldSnapshot snapshot = WorldSnapshot.createNew(
-                snapshotId, fov, aspectRatio, nearPlane, farPlane, camera.getYaw(), camera.getPitch()
+                snapshotId, fov, aspectRatio, nearPlane, farPlane, camera.getYaw(), camera.getPitch(), captureZoom
         );
 
         Frustum frustum = new Frustum(camera, fov, aspectRatio, nearPlane, farPlane);
 
-        Vector3f[] nearCorners = frustum.getCornersAtDistance(nearPlane);
-        Vector3f[] farCorners = frustum.getCornersAtDistance(farPlane);
+        Vector3d[] nearCorners = frustum.getCornersAtDistance(nearPlane);
+        Vector3d[] farCorners = frustum.getCornersAtDistance(farPlane);
 
         double minX = camera.getEyeX(), maxX = camera.getEyeX();
         double minY = camera.getEyeY(), maxY = camera.getEyeY();
         double minZ = camera.getEyeZ(), maxZ = camera.getEyeZ();
 
-        for (Vector3f c : nearCorners) {
+        for (Vector3d c : nearCorners) {
             minX = Math.min(minX, c.x); maxX = Math.max(maxX, c.x);
             minY = Math.min(minY, c.y); maxY = Math.max(maxY, c.y);
             minZ = Math.min(minZ, c.z); maxZ = Math.max(maxZ, c.z);
         }
-        for (Vector3f c : farCorners) {
+        for (Vector3d c : farCorners) {
             minX = Math.min(minX, c.x); maxX = Math.max(maxX, c.x);
             minY = Math.min(minY, c.y); maxY = Math.max(maxY, c.y);
             minZ = Math.min(minZ, c.z); maxZ = Math.max(maxZ, c.z);
@@ -98,6 +109,7 @@ public class ViewfinderEngine {
                     }
 
                     BlockPos pos = new BlockPos(x, y, z);
+                    if (!level.hasChunkAt(pos) || !level.getWorldBorder().isWithinBounds(pos)) return null;
                     BlockState state = level.getBlockState(pos);
                     if (state.isAir() || state.is(Blocks.BEDROCK)) {
                         continue;
@@ -108,27 +120,30 @@ public class ViewfinderEngine {
                     int paletteIndex = snapshot.getOrAddPaletteIndex(state);
                     CompoundTag beData = null;
                     BlockEntity be = level.getBlockEntity(pos);
-                    if (be != null) {
+                    if (be instanceof SignBlockEntity || (be instanceof ChestBlockEntity
+                            && RealmFinderConfig.get().copyContainerContents)) {
                         beData = be.saveWithFullMetadata(level.registryAccess());
                     }
 
                     snapshot.getBlocks().add(new CapturedBlock(camRel.x, camRel.y, camRel.z, paletteIndex, beData));
+                    if (snapshot.getBlockCount() > RealmFinderConfig.get().maxCapturedBlocks) return null;
                 }
             }
         }
 
-        // Entity Capture: Living entities, armor stands, item frames, minecarts, boats
+        // Entity capture: living mobs only; equipment, inventories and gameplay state are retained.
         AABB entityBox = new AABB(minX, minY, minZ, maxX, maxY, maxZ);
-        List<Entity> candidateEntities = level.getEntities((Entity) null, entityBox, entity -> {
+        List<Entity> candidateEntities = RealmFinderConfig.get().allowEntityCapture
+                ? level.getEntities((Entity) null, entityBox, entity -> {
             if (!entity.isAlive()) return false;
-            if (entity instanceof Player) return false;
+            if (!(entity instanceof LivingEntity) || entity instanceof Player) return false;
             if (entity instanceof WitherBoss) return false;
             if (entity instanceof EnderDragon) return false;
             return true;
-        });
+        }) : List.of();
 
         int entityCount = 0;
-        final int MAX_CAPTURED_ENTITIES = 16;
+        final int MAX_CAPTURED_ENTITIES = RealmFinderConfig.get().maxCapturedEntities;
         for (Entity entity : candidateEntities) {
             if (entityCount >= MAX_CAPTURED_ENTITIES) break;
             double ex = entity.getX();
@@ -139,8 +154,8 @@ public class ViewfinderEngine {
                 float relYaw = entity.getYRot() - camera.getYaw();
                 float relPitch = entity.getXRot();
                 String typeId = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString();
-                CompoundTag nbt = new CompoundTag();
-                entity.saveWithoutId(nbt);
+                CompoundTag nbt = CompanionData.capture(entity);
+                if (!RealmFinderConfig.get().copyMobEquipment) nbt = CompanionData.withoutEquipment(nbt);
                 snapshot.getEntities().add(new CapturedEntity(camRel.x, camRel.y, camRel.z, relYaw, relPitch, typeId, nbt));
                 entityCount++;
             }
@@ -153,125 +168,55 @@ public class ViewfinderEngine {
      * Stretches and stamps the snapshot into the world with clean 90-degree alignment
      * and safe non-destructive bounding-box carving.
      */
-    public static void stamp(ServerLevel level, WorldSnapshot snapshot, CameraTransform targetCamera, boolean carve, UndoRecord undoRecord) {
-        stamp(level, snapshot, targetCamera, carve, 1.0f, undoRecord);
+    public static boolean stamp(ServerLevel level, WorldSnapshot snapshot, CameraTransform targetCamera, boolean carve, UndoRecord undoRecord) {
+        return stamp(level, snapshot, targetCamera, carve, 1.0f, undoRecord);
     }
 
-    public static void stamp(ServerLevel level, WorldSnapshot snapshot, CameraTransform targetCamera, boolean carve, float scale, UndoRecord undoRecord) {
-        if (snapshot.getBlocks().isEmpty() && snapshot.getEntities().isEmpty()) {
-            return;
+    public static boolean stamp(ServerLevel level, WorldSnapshot snapshot, CameraTransform targetCamera, boolean carve, float scale, UndoRecord undoRecord) {
+        if (undoRecord == null || snapshot == null || (snapshot.getBlocks().isEmpty() && snapshot.getEntities().isEmpty())
+                || snapshot.getBlocks().size() > GameplayLimits.MAX_CAPTURE_BLOCKS
+                || snapshot.getEntities().size() > GameplayLimits.MAX_CAPTURED_ENTITIES) {
+            return false;
         }
 
-        // Clamp scale to supported discrete factors
-        if (scale < 0.75f) {
-            scale = 0.5f;
-        } else if (scale >= 1.5f && scale < 2.5f) {
-            scale = 2.0f;
-        } else if (scale >= 2.5f) {
-            scale = 3.0f;
-        } else {
-            scale = 1.0f;
+        PlacementGeometry.Plan plan = PlacementGeometry.build(snapshot, targetCamera, scale,
+                level.getMinBuildHeight(), level.getMaxBuildHeight());
+        if (plan == null) return false;
+        CameraTransform snappedCamera = plan.camera();
+        float snappedYaw = snappedCamera.getYaw();
+        Map<BlockPos, BlockState> blocksToPlace = plan.blocks();
+        Map<BlockPos, CompoundTag> blockEntitiesToPlace = plan.blockEntities();
+        Set<BlockPos> carvePositions = plan.carvePositions();
+
+        for (BlockPos pos : blocksToPlace.keySet()) {
+            if (!level.hasChunkAt(pos) || !level.getWorldBorder().isWithinBounds(pos)) return false;
+            if (level.getBlockEntity(pos) != null) return false;
+            if (level.getBlockState(pos).is(Blocks.BEDROCK)) return false;
         }
-
-        // Snap target camera angles to clean 90-degree increments for pristine voxel alignment
-        float snappedYaw = Math.round(targetCamera.getYaw() / 90.0f) * 90.0f;
-        float snappedPitch = Math.round(targetCamera.getPitch() / 45.0f) * 45.0f;
-        // Keep pitch clean: if close to horizontal, snap to 0
-        if (Math.abs(snappedPitch) < 25.0f) {
-            snappedPitch = 0.0f;
-        }
-
-        CameraTransform snappedCamera = new CameraTransform(
-                targetCamera.getEyeX(), targetCamera.getEyeY(), targetCamera.getEyeZ(),
-                snappedYaw, snappedPitch
-        );
-
-        float deltaYaw = snappedYaw - snapshot.getOriginalYaw();
-        Rotation rotation = calculateRotation(deltaYaw);
-
-        // Map of target block pos -> block to place
-        Map<BlockPos, BlockState> blocksToPlace = new HashMap<>();
-        Map<BlockPos, CompoundTag> blockEntitiesToPlace = new HashMap<>();
-
-        int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE;
-        int minY = Integer.MAX_VALUE, maxY = Integer.MIN_VALUE;
-        int minZ = Integer.MAX_VALUE, maxZ = Integer.MIN_VALUE;
-
-        int expansion = (int) Math.round(scale);
-
-        for (CapturedBlock block : snapshot.getBlocks()) {
-            BlockState originalState = snapshot.getBlockState(block.getPaletteIndex());
-            if (originalState == null || originalState.isAir()) continue;
-
-            BlockState rotatedState = originalState.rotate(rotation);
-            boolean fragile = isAttachedOrFragile(rotatedState);
-
-            Vector3f worldPos = snappedCamera.toWorldSpace(
-                    block.getCamX() * scale,
-                    block.getCamY() * scale,
-                    block.getCamZ() * scale
-            );
-            BlockPos basePos = BlockPos.containing(worldPos.x, worldPos.y, worldPos.z);
-
-            if (expansion >= 2) {
-                // Voxel dilation for Giant / Colossal scale
-                for (int dx = 0; dx < expansion; dx++) {
-                    for (int dy = 0; dy < expansion; dy++) {
-                        for (int dz = 0; dz < expansion; dz++) {
-                            // Fragile blocks placed only at base anchor to prevent duplication conflicts
-                            if (fragile && (dx != 0 || dy != 0 || dz != 0)) {
-                                continue;
-                            }
-                            BlockPos pos = basePos.offset(dx, dy, dz);
-                            if (level.isOutsideBuildHeight(pos)) continue;
-
-                            blocksToPlace.put(pos, rotatedState);
-                            if (block.getBlockEntityData() != null && dx == 0 && dy == 0 && dz == 0) {
-                                blockEntitiesToPlace.put(pos, block.getBlockEntityData());
-                            }
-
-                            minX = Math.min(minX, pos.getX()); maxX = Math.max(maxX, pos.getX());
-                            minY = Math.min(minY, pos.getY()); maxY = Math.max(maxY, pos.getY());
-                            minZ = Math.min(minZ, pos.getZ()); maxZ = Math.max(maxZ, pos.getZ());
-                        }
-                    }
-                }
-            } else {
-                // Scale 1.0f or miniature 0.5f
-                if (level.isOutsideBuildHeight(basePos)) continue;
-
-                blocksToPlace.put(basePos, rotatedState);
-                if (block.getBlockEntityData() != null) {
-                    blockEntitiesToPlace.put(basePos, block.getBlockEntityData());
-                }
-
-                minX = Math.min(minX, basePos.getX()); maxX = Math.max(maxX, basePos.getX());
-                minY = Math.min(minY, basePos.getY()); maxY = Math.max(maxY, basePos.getY());
-                minZ = Math.min(minZ, basePos.getZ()); maxZ = Math.max(maxZ, basePos.getZ());
+        if (RealmFinderConfig.get().mayCarve(carve, scale) && !blocksToPlace.isEmpty()) {
+            if ((long) blocksToPlace.size() + carvePositions.size() > GameplayLimits.MAX_PLACED_BLOCKS) return false;
+            for (BlockPos pos : carvePositions) {
+                if (!level.hasChunkAt(pos) || !level.getWorldBorder().isWithinBounds(pos)
+                        || level.getBlockEntity(pos) != null) return false;
             }
         }
+        for (CapturedEntity captured : snapshot.getEntities()) {
+            Vector3d worldPos = PlacementGeometry.worldPosition(snappedCamera,
+                    captured.getCamX(), captured.getCamY(), captured.getCamZ(), scale, snapshot.getCaptureZoom(), snapshot.getFarPlane());
+            BlockPos pos = BlockPos.containing(worldPos.x, worldPos.y, worldPos.z);
+            if (level.isOutsideBuildHeight(pos) || !level.hasChunkAt(pos)
+                    || !level.getWorldBorder().isWithinBounds(pos)) return false;
+        }
 
-        // Safe Carve Phase: ONLY carve strictly inside the bounding box above the ground plane!
-        if (carve && !blocksToPlace.isEmpty() && maxY > minY) {
-            Frustum targetFrustum = new Frustum(
-                    snappedCamera, snapshot.getFov(), snapshot.getAspectRatio(),
-                    snapshot.getNearPlane(), snapshot.getFarPlane() * scale
-            );
-
-            for (int y = minY + 1; y <= maxY; y++) {
-                for (int x = minX; x <= maxX; x++) {
-                    for (int z = minZ; z <= maxZ; z++) {
-                        BlockPos pos = new BlockPos(x, y, z);
-                        if (!blocksToPlace.containsKey(pos) && targetFrustum.containsPoint(x + 0.5, y + 0.5, z + 0.5)) {
-                            BlockState existing = level.getBlockState(pos);
-                            if (!existing.isAir() && !existing.is(Blocks.BEDROCK)) {
-                                if (undoRecord != null) {
-                                    undoRecord.recordBeforeChange(level, pos);
-                                }
-                                level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
-                            }
-                        }
-                    }
+        try {
+        // Clear only empty cells inside the photographed structure's occupied columns.
+        if (RealmFinderConfig.get().mayCarve(carve, scale) && !blocksToPlace.isEmpty()) {
+            for (BlockPos pos : carvePositions) {
+                BlockState existing = level.getBlockState(pos);
+                if (!existing.isAir() && !existing.is(Blocks.BEDROCK)) {
+                    undoRecord.recordBeforeChange(level, pos);
+                    level.setBlock(pos, Blocks.AIR.defaultBlockState(),
+                            Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE | Block.UPDATE_SUPPRESS_DROPS);
                 }
             }
         }
@@ -293,7 +238,7 @@ public class ViewfinderEngine {
         pass2.sort(Comparator.comparingInt(e -> e.getKey().getY()));
 
         // Pass 1: Solid structural foundations (suppress early neighbor drops)
-        int placeFlags = Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE;
+        int placeFlags = Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE | Block.UPDATE_SUPPRESS_DROPS;
         for (Map.Entry<BlockPos, BlockState> entry : pass1) {
             placeSingleBlock(level, entry.getKey(), entry.getValue(), blockEntitiesToPlace, undoRecord, placeFlags);
         }
@@ -311,29 +256,35 @@ public class ViewfinderEngine {
 
         // Pass 4: Entity Materialization (Mobs, Animals, Armor Stands, etc.)
         for (CapturedEntity captured : snapshot.getEntities()) {
-            Vector3f worldPos = snappedCamera.toWorldSpace(
-                    captured.getCamX() * scale,
-                    captured.getCamY() * scale,
-                    captured.getCamZ() * scale
-            );
+            Vector3d worldPos = PlacementGeometry.worldPosition(snappedCamera,
+                    captured.getCamX(), captured.getCamY(), captured.getCamZ(), scale, snapshot.getCaptureZoom(), snapshot.getFarPlane());
             float newYaw = (captured.getYaw() + snappedYaw) % 360.0f;
 
-            CompoundTag nbt = captured.getEntityNbt();
-            nbt.remove("UUID");
-            nbt.putString("id", captured.getEntityTypeId());
+            ResourceLocation typeId = ResourceLocation.tryParse(captured.getEntityTypeId());
+            EntityType<?> type = typeId == null ? null : BuiltInRegistries.ENTITY_TYPE.getOptional(typeId).orElse(null);
+            Entity ent = type == null ? null : type.create(level);
 
-            Entity ent = EntityType.loadEntityRecursive(nbt, level, e -> {
-                e.moveTo(worldPos.x, worldPos.y, worldPos.z, newYaw, captured.getPitch());
-                return e;
-            });
-
-            if (ent != null) {
+            if (ent instanceof LivingEntity && !(ent instanceof Player)
+                    && !(ent instanceof WitherBoss) && !(ent instanceof EnderDragon)) {
+                CompoundTag mobData = captured.getEntityNbt();
+                if (!RealmFinderConfig.get().copyMobEquipment) mobData = CompanionData.withoutEquipment(mobData);
+                CompanionData.restore(ent, mobData);
+                ent.moveTo(worldPos.x, worldPos.y, worldPos.z, newYaw, captured.getPitch());
                 ent.setUUID(UUID.randomUUID());
-                level.addFreshEntity(ent);
-                if (undoRecord != null) {
+                if (level.addFreshEntity(ent) && undoRecord != null) {
                     undoRecord.recordSpawnedEntity(ent.getUUID());
                 }
             }
+        }
+        return undoRecord.hasEffectiveChanges(level);
+        } catch (RuntimeException e) {
+            RealmFinder.LOGGER.error("Photograph placement failed; restoring changed blocks", e);
+            try {
+                undoRecord.restore(level, null);
+            } catch (RuntimeException rollbackError) {
+                RealmFinder.LOGGER.error("Photograph placement rollback also failed", rollbackError);
+            }
+            return false;
         }
     }
 
@@ -351,7 +302,8 @@ public class ViewfinderEngine {
 
         if (blockEntitiesToPlace.containsKey(pos)) {
             BlockEntity be = level.getBlockEntity(pos);
-            if (be != null) {
+            if (be instanceof SignBlockEntity || (be instanceof ChestBlockEntity
+                    && RealmFinderConfig.get().copyContainerContents)) {
                 CompoundTag beData = blockEntitiesToPlace.get(pos).copy();
                 beData.putInt("x", pos.getX());
                 beData.putInt("y", pos.getY());
@@ -382,15 +334,4 @@ public class ViewfinderEngine {
                 || block instanceof TripWireHookBlock;
     }
 
-    private static Rotation calculateRotation(float deltaYaw) {
-        float normalized = (deltaYaw % 360 + 360) % 360;
-        if (normalized >= 45 && normalized < 135) {
-            return Rotation.CLOCKWISE_90;
-        } else if (normalized >= 135 && normalized < 225) {
-            return Rotation.CLOCKWISE_180;
-        } else if (normalized >= 225 && normalized < 315) {
-            return Rotation.COUNTERCLOCKWISE_90;
-        }
-        return Rotation.NONE;
-    }
 }

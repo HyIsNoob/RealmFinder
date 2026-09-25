@@ -1,5 +1,6 @@
 package com.hyisnoob.realmfinder.client.render;
 
+import com.hyisnoob.realmfinder.client.CameraZoom;
 import com.hyisnoob.realmfinder.common.item.ModItems;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.DeltaTracker;
@@ -178,8 +179,10 @@ public class CameraOverlayRenderer {
         }
 
         // 7. Clean instruction footer
-        String hint = "[R-CLICK] SNAP PHOTO   •   [HOLD SHIFT] LEVEL ASSIST";
-        int hw = mc.font.width(hint);
-        guiGraphics.drawString(mc.font, hint, (screenW - hw) / 2, frameY + frameSize + bezelWidth + 8, 0xFFCCCCCC, true);
+        if (com.hyisnoob.realmfinder.client.ClientPreferences.get().showHudHints) {
+            String hint = "[R-CLICK] SNAP   [CTRL+SCROLL] ZOOM " + CameraZoom.get() + "x   [SHIFT] LEVEL";
+            int hw = mc.font.width(hint);
+            guiGraphics.drawString(mc.font, hint, (screenW - hw) / 2, frameY + frameSize + bezelWidth + 8, 0xFFCCCCCC, true);
+        }
     }
 }

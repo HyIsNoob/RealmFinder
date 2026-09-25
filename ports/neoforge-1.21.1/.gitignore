@@ -1,0 +1,15 @@
+# NeoForge development run data
+logs/
+crash-reports/
+config/
+world/
+saves/
+screenshots/
+options.txt
+server.properties
+eula.txt
+usercache.json
+whitelist.json
+ops.json
+banned-players.json
+banned-ips.json

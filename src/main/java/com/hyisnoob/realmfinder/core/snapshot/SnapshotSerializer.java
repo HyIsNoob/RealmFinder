@@ -1,5 +1,6 @@
 package com.hyisnoob.realmfinder.core.snapshot;
 
+import com.hyisnoob.realmfinder.core.engine.GameplayLimits;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -24,6 +25,7 @@ public class SnapshotSerializer {
 
     public static CompoundTag toNbt(WorldSnapshot snapshot) {
         CompoundTag tag = new CompoundTag();
+        tag.putInt("FormatVersion", 2);
         tag.putUUID("SnapshotId", snapshot.getSnapshotId());
         tag.putLong("Timestamp", snapshot.getTimestamp());
         tag.putFloat("Fov", snapshot.getFov());
@@ -32,6 +34,7 @@ public class SnapshotSerializer {
         tag.putFloat("FarPlane", snapshot.getFarPlane());
         tag.putFloat("OriginalYaw", snapshot.getOriginalYaw());
         tag.putFloat("OriginalPitch", snapshot.getOriginalPitch());
+        tag.putInt("CaptureZoom", snapshot.getCaptureZoom());
         tag.putInt("BlockCount", snapshot.getBlockCount());
 
         // Palette
@@ -43,6 +46,7 @@ public class SnapshotSerializer {
 
         // Entities
         ListTag entitiesTag = new ListTag();
+        int totalEntityBytes = 0;
         for (CapturedEntity entity : snapshot.getEntities()) {
             CompoundTag entTag = new CompoundTag();
             entTag.putFloat("camX", entity.getCamX());
@@ -51,7 +55,12 @@ public class SnapshotSerializer {
             entTag.putFloat("yaw", entity.getYaw());
             entTag.putFloat("pitch", entity.getPitch());
             entTag.putString("id", entity.getEntityTypeId());
-            entTag.put("data", entity.getEntityNbt());
+            CompoundTag entityData = CompanionData.safeStoredData(entity.getEntityNbt(), entity.getEntityTypeId());
+            int entityBytes = serializedSize(entityData);
+            if (entityBytes < 0 || entityBytes > GameplayLimits.MAX_ENTITY_DATA_BYTES
+                    || totalEntityBytes + entityBytes > GameplayLimits.MAX_TOTAL_ENTITY_DATA_BYTES) return null;
+            totalEntityBytes += entityBytes;
+            entTag.put("data", entityData);
             entitiesTag.add(entTag);
         }
         tag.put("Entities", entitiesTag);
@@ -60,10 +69,13 @@ public class SnapshotSerializer {
         // Blocks binary stream
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
              GZIPOutputStream gzos = new GZIPOutputStream(baos);
-             DataOutputStream dos = new DataOutputStream(gzos)) {
+            DataOutputStream dos = new DataOutputStream(gzos)) {
 
             dos.writeInt(snapshot.getBlocks().size());
+            int decodedBytes = 4;
             for (CapturedBlock block : snapshot.getBlocks()) {
+                decodedBytes += 15;
+                if (decodedBytes > 4 * 1024 * 1024) return null;
                 dos.writeFloat(block.getCamX());
                 dos.writeFloat(block.getCamY());
                 dos.writeFloat(block.getCamZ());
@@ -77,6 +89,9 @@ public class SnapshotSerializer {
                     NbtIo.write(beData, beDos);
                     beDos.flush();
                     byte[] beBytes = beBaos.toByteArray();
+                    if (beBytes.length > GameplayLimits.MAX_BLOCK_ENTITY_BYTES) return null;
+                    decodedBytes += 4 + beBytes.length;
+                    if (decodedBytes > 4 * 1024 * 1024) return null;
                     dos.writeInt(beBytes.length);
                     dos.write(beBytes);
                 } else {
@@ -87,14 +102,15 @@ public class SnapshotSerializer {
             gzos.finish();
             tag.putByteArray("CompressedBlocks", baos.toByteArray());
         } catch (IOException e) {
-            e.printStackTrace();
+            return null;
         }
 
         return tag;
     }
 
     public static WorldSnapshot fromNbt(CompoundTag tag) {
-        if (!tag.hasUUID("SnapshotId")) {
+        if (!tag.hasUUID("SnapshotId") || !tag.contains("CompressedBlocks", Tag.TAG_BYTE_ARRAY)
+                || tag.getInt("FormatVersion") < 0 || tag.getInt("FormatVersion") > 2) {
             return null;
         }
 
@@ -106,13 +122,29 @@ public class SnapshotSerializer {
         float farPlane = tag.getFloat("FarPlane");
         float originalYaw = tag.getFloat("OriginalYaw");
         float originalPitch = tag.getFloat("OriginalPitch");
+        int captureZoom = tag.getInt("FormatVersion") >= 2 ? tag.getInt("CaptureZoom") : 1;
+        if (!Float.isFinite(fov) || fov < 1 || fov > 100
+                || !Float.isFinite(aspectRatio) || aspectRatio != 1.0f
+                || !Float.isFinite(nearPlane) || nearPlane != 1.0f
+                || !Float.isFinite(farPlane) || farPlane < 1 || farPlane > 36
+                || !Float.isFinite(originalYaw) || !Float.isFinite(originalPitch)
+                || captureZoom < 1 || captureZoom > 6
+                || tag.getByteArray("CompressedBlocks").length > GameplayLimits.MAX_COMPRESSED_BLOCK_BYTES) {
+            return null;
+        }
 
         // Palette
         List<BlockState> palette = new ArrayList<>();
         ListTag paletteTag = tag.getList("Palette", Tag.TAG_COMPOUND);
+        if (paletteTag.size() > 32767) return null;
         for (int i = 0; i < paletteTag.size(); i++) {
             CompoundTag stateTag = paletteTag.getCompound(i);
-            BlockState state = NbtUtils.readBlockState(BuiltInRegistries.BLOCK.asLookup(), stateTag);
+            BlockState state;
+            try {
+                state = NbtUtils.readBlockState(BuiltInRegistries.BLOCK.asLookup(), stateTag);
+            } catch (RuntimeException e) {
+                return null;
+            }
             if (state == null) {
                 state = Blocks.AIR.defaultBlockState();
             }
@@ -128,15 +160,25 @@ public class SnapshotSerializer {
                  DataInputStream dis = new DataInputStream(gzis)) {
 
                 int size = dis.readInt();
+                if (size < 0 || size > GameplayLimits.MAX_CAPTURE_BLOCKS) return null;
+                int decodedBytes = 4;
                 for (int i = 0; i < size; i++) {
+                    decodedBytes += 15;
+                    if (decodedBytes > 4 * 1024 * 1024) return null;
                     float camX = dis.readFloat();
                     float camY = dis.readFloat();
                     float camZ = dis.readFloat();
                     int paletteIndex = dis.readShort();
+                    if (!Float.isFinite(camX) || !Float.isFinite(camY) || !Float.isFinite(camZ)
+                            || Math.abs(camX) > 128 || Math.abs(camY) > 128 || Math.abs(camZ) > 128
+                            || paletteIndex < 0 || paletteIndex >= palette.size()) return null;
 
                     CompoundTag beData = null;
                     if (dis.readBoolean()) {
                         int beLen = dis.readInt();
+                        if (beLen < 0 || beLen > GameplayLimits.MAX_BLOCK_ENTITY_BYTES) return null;
+                        decodedBytes += 4 + beLen;
+                        if (decodedBytes > 4 * 1024 * 1024) return null;
                         byte[] beBytes = new byte[beLen];
                         dis.readFully(beBytes);
                         ByteArrayInputStream beBais = new ByteArrayInputStream(beBytes);
@@ -146,14 +188,18 @@ public class SnapshotSerializer {
                     blocks.add(new CapturedBlock(camX, camY, camZ, paletteIndex, beData));
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                return null;
+            } catch (RuntimeException e) {
+                return null;
             }
         }
 
         // Entities
         List<CapturedEntity> entities = new ArrayList<>();
+        int totalEntityBytes = 0;
         if (tag.contains("Entities", Tag.TAG_LIST)) {
             ListTag entitiesTag = tag.getList("Entities", Tag.TAG_COMPOUND);
+            if (entitiesTag.size() > GameplayLimits.MAX_CAPTURED_ENTITIES) return null;
             for (int i = 0; i < entitiesTag.size(); i++) {
                 CompoundTag entTag = entitiesTag.getCompound(i);
                 float camX = entTag.getFloat("camX");
@@ -162,12 +208,30 @@ public class SnapshotSerializer {
                 float yaw = entTag.getFloat("yaw");
                 float pitch = entTag.getFloat("pitch");
                 String id = entTag.getString("id");
-                CompoundTag data = entTag.getCompound("data");
+                if (!Float.isFinite(camX) || !Float.isFinite(camY) || !Float.isFinite(camZ)
+                        || Math.abs(camX) > 128 || Math.abs(camY) > 128 || Math.abs(camZ) > 128
+                        || !Float.isFinite(yaw) || !Float.isFinite(pitch) || id.length() > 128) return null;
+                CompoundTag data = CompanionData.safeStoredData(entTag.getCompound("data"), id);
+                int entityBytes = serializedSize(data);
+                if (entityBytes < 0 || entityBytes > GameplayLimits.MAX_ENTITY_DATA_BYTES
+                        || totalEntityBytes + entityBytes > GameplayLimits.MAX_TOTAL_ENTITY_DATA_BYTES) return null;
+                totalEntityBytes += entityBytes;
                 entities.add(new CapturedEntity(camX, camY, camZ, yaw, pitch, id, data));
             }
         }
 
         return new WorldSnapshot(snapshotId, timestamp, fov, aspectRatio,
-                nearPlane, farPlane, originalYaw, originalPitch, palette, blocks, entities);
+                nearPlane, farPlane, originalYaw, originalPitch, captureZoom, palette, blocks, entities);
+    }
+
+    private static int serializedSize(CompoundTag tag) {
+        try (ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+             DataOutputStream out = new DataOutputStream(bytes)) {
+            NbtIo.write(tag, out);
+            out.flush();
+            return bytes.size();
+        } catch (IOException | RuntimeException e) {
+            return -1;
+        }
     }
 }
